@@ -1,3 +1,4 @@
+
 // Public REST proxy for Binance (USDT-M & COIN-M) with fetch fallback
 async function getFetch() {
   if (typeof fetch !== 'undefined') return fetch;

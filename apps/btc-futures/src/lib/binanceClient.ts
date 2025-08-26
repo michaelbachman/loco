@@ -34,11 +34,14 @@ export class BinanceFuturesClient {
       coinWsBase: cfg.coinWsBase ?? "wss://dstream.binance.com/ws",
       useProxy: cfg.useProxy ?? true,
       proxyUrl: cfg.proxyUrl ?? "/.netlify/functions/binance",
-      fetchImpl: cfg.fetchImpl ?? fetch,
+      fetchImpl: cfg.fetchImpl ?? (typeof fetch !== 'undefined' ? fetch : undefined as any),
       timeoutMs: cfg.timeoutMs ?? 12_000,
     } as Required<BinanceClientConfig>;
 
-    this.fetcher = this.cfg.fetchImpl;
+    const __rawFetch = this.cfg.fetchImpl ?? (globalThis as any).fetch;
+    if (!__rawFetch) { throw new Error('No fetch available') }
+    // Bind through an arrow wrapper to avoid "Illegal invocation" in some browsers/builds
+    this.fetcher = ((input: any, init?: any) => (__rawFetch as any)(input, init)) as any;
   }
   private restBase(market: MarketKind): string { return market === "coin" ? this.cfg.coinRestBase : this.cfg.usdtRestBase; }
   private wsBase(market: MarketKind): string { return market === "coin" ? this.cfg.coinWsBase : this.cfg.usdtWsBase; }
@@ -107,4 +110,3 @@ export class BinanceFuturesClient {
     return { close: () => { closed = true; if (reconnectTimer) clearTimeout(reconnectTimer); if (ws && ws.readyState === WebSocket.OPEN) ws.close(); } };
   }
 }
-

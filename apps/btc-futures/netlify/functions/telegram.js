@@ -1,3 +1,4 @@
+
 // Sends a message via Telegram bot with fetch fallback
 async function getFetch() {
   if (typeof fetch !== 'undefined') return fetch;
