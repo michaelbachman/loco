@@ -1,5 +1,5 @@
 [build]
-  command = "cd apps/btc-futures && npm ci && npm run build"
+  command = "cd apps/btc-futures && npm install --no-audit --no-fund && npm run build"
   publish = "apps/btc-futures/dist"
 
 [functions]
