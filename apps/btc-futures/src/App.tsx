@@ -18,12 +18,12 @@ function formatSlotLabel(h:number, interval:number){
 function computeRows(bars:Ohlc[], closes:number[], interval:number, source?:string): DriftRow[] {
   const wins=[60,30,15,5]
   return closes.map(t=>{
-    const end=nearestBarBefore(bars,t)
-    const oneMin=nearestBarBefore(bars, t - 1*60*1000)
-    if(oneMin){ r.p1m = oneMin.close }
-    if(end && oneMin){ r.d1m = pct(end.close, oneMin.close); r.d1mAbs = end.close - oneMin.close }
+    const end = nearestBarBefore(bars, t)
+    const oneMin = nearestBarBefore(bars, t - 1*60*1000)
     const slot = formatSlotLabel(new Date(t).getUTCHours(), interval)
     const r: DriftRow = { t, slot, d60:null, d30:null, d15:null, d5:null, d60Abs:null, d30Abs:null, d15Abs:null, d5Abs:null, p1m:null, d1m:null, d1mAbs:null, source }
+    if(oneMin){ r.p1m = oneMin.close }
+    if(end && oneMin){ r.d1m = pct(end.close, oneMin.close); r.d1mAbs = end.close - oneMin.close }
     if(end){
       for(const m of wins){
         const beg=nearestBarBefore(bars, t - m*60*1000)
