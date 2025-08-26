@@ -4,8 +4,6 @@ export default {
     "./index.html",
     "./src/**/*.{ts,tsx}",
   ],
-  theme: {
-    extend: {},
-  },
+  theme: { extend: {} },
   plugins: [],
 }

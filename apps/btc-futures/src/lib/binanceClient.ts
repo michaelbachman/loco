@@ -1,3 +1,4 @@
+
 export type MarketKind = "usdt" | "coin";
 
 export interface BinanceClientConfig {

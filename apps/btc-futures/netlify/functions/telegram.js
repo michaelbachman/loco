@@ -1,5 +1,12 @@
+
 // Sends a message via Telegram bot
-// Requires env vars: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+// Adds robust fetch fallback for older Node runtimes.
+
+async function getFetch() {
+  if (typeof fetch !== 'undefined') return fetch;
+  try { const { fetch: undiciFetch } = await import('undici'); return undiciFetch; }
+  catch { throw new Error('No fetch available in this runtime'); }
+}
 
 exports.handler = async (event) => {
   try {
@@ -13,7 +20,7 @@ exports.handler = async (event) => {
     if (!token || !chatId) return { statusCode: 500, body: JSON.stringify({ error: 'Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID' }) };
 
     const url = `https://api.telegram.org/bot${token}/sendMessage`;
-    const r = await fetch(url, {
+    const r = await (await getFetch())(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' })
