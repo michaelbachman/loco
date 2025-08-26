@@ -3,4 +3,4 @@
 @tailwind components;
 @tailwind utilities;
 
-body { @apply bg-neutral-900 text-neutral-100; font-family: 'Noto Sans', system-ui, sans-serif; }
+body { font-family: 'Noto Sans', system-ui, sans-serif; }

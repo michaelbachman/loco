@@ -1,7 +1,7 @@
 {
-  "name": "btc-futures-loco",
+  "name": "btc-futures-kraken",
   "private": true,
-  "version": "0.2.3",
+  "version": "0.1.0",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -9,9 +9,7 @@
   },
   "dependencies": {
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "recharts": "^2.12.7",
-    "undici": "^6.19.8"
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",
