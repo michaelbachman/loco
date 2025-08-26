@@ -100,7 +100,7 @@ export default function App(){
   const [bzRows, setBzRows] = useState<DriftRow[]|null>(null)
   const [krAgg, setKrAgg] = useState<any[]|null>(null)
   const [bzAgg, setBzAgg] = useState<any[]|null>(null)
-  const [err, setErr] = useState<string|nil>(null as any)
+  const [err, setErr] = useState<string | null>(null)
 
   // Live marks
   useEffect(()=>{
@@ -168,7 +168,7 @@ export default function App(){
       const bcl = closesInRange(start,end, bzInterval)
       const brows = computeRows(bars, bcl, bzInterval, 'futures.ohlc')
       setBzRows(brows); setBzAgg(aggregate(brows, bzInterval===8? ['00:00','08:00','16:00']: ['00:00','04:00','08:00','12:00','16:00','20:00'])); setBzStatus('ok')
-    }catch(e:any){ setBzStatus('error'); setErr(prev=> (prev? prev+' | ': '') + String(e?.message||e)) }
+    }catch(e:any){ setBzStatus('error'); setErr((prev: string | null)=> (prev? prev+' | ': '') + String(e?.message||e)) }
   })() },[hours, krSymbol, bzSymbol, krInterval, bzInterval])
 
   const now = Date.now()
