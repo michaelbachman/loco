@@ -1,7 +1,4 @@
-
-// Sends a message via Telegram bot
-// Adds robust fetch fallback for older Node runtimes.
-
+// Sends a message via Telegram bot with fetch fallback
 async function getFetch() {
   if (typeof fetch !== 'undefined') return fetch;
   try { const { fetch: undiciFetch } = await import('undici'); return undiciFetch; }

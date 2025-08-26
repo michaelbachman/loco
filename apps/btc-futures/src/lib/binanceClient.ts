@@ -107,3 +107,4 @@ export class BinanceFuturesClient {
     return { close: () => { closed = true; if (reconnectTimer) clearTimeout(reconnectTimer); if (ws && ws.readyState === WebSocket.OPEN) ws.close(); } };
   }
 }
+

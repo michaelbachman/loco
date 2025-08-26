@@ -1,7 +1,4 @@
-
-// Public REST proxy for Binance (USDT-M & COIN-M)
-// Adds robust fetch fallback for older Node runtimes.
-
+// Public REST proxy for Binance (USDT-M & COIN-M) with fetch fallback
 async function getFetch() {
   if (typeof fetch !== 'undefined') return fetch;
   try { const { fetch: undiciFetch } = await import('undici'); return undiciFetch; }
