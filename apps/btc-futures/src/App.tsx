@@ -7,7 +7,7 @@ import { Ohlc, pct, closesInRange, nearestBarBefore } from './lib/util'
 const client = new KrakenFuturesClient()
 const DEFAULT_SYMBOL = 'PI_XBTUSD'
 
-type DriftRow = { t:number; slot:string; d60:number|null; d30:number|null; d15:number|null; d5:number|null; source?:string }
+type DriftRow = { t:number; slot:string; d60:number|null; d30:number|null; d15:number|null; d5:number|null; d60Abs:number|null; d30Abs:number|null; d15Abs:number|null; d5Abs:number|null; source?:string }
 
 function formatSlotLabel(h:number, interval:number){
   if(interval===8) return h%24===0?'00:00':h%24===8?'08:00':'16:00'
@@ -20,13 +20,17 @@ function computeRows(bars:Ohlc[], closes:number[], interval:number, source?:stri
   return closes.map(t=>{
     const end=nearestBarBefore(bars,t)
     const slot = formatSlotLabel(new Date(t).getUTCHours(), interval)
-    const r: DriftRow = { t, slot, d60:null, d30:null, d15:null, d5:null, source }
+    const r: DriftRow = { t, slot, d60:null, d30:null, d15:null, d5:null, d60Abs:null, d30Abs:null, d15Abs:null, d5Abs:null, source }
     if(end){
       for(const m of wins){
         const beg=nearestBarBefore(bars, t - m*60*1000)
         if(beg){
           const pc=pct(end.close, beg.close)
-          if(m===60) r.d60=pc; if(m===30) r.d30=pc; if(m===15) r.d15=pc; if(m===5) r.d5=pc
+          const usd=end.close - beg.close
+          if(m===60){ r.d60=pc; r.d60Abs=usd }
+          if(m===30){ r.d30=pc; r.d30Abs=usd }
+          if(m===15){ r.d15=pc; r.d15Abs=usd }
+          if(m===5){ r.d5=pc; r.d5Abs=usd }
         }
       }
     }
@@ -52,8 +56,8 @@ function aggregate(rows:DriftRow[], slots:string[]){
 }
 
 function exportCsvRows(rows:DriftRow[], name:string){
-  const header='funding_close_utc,slot,delta60_pct,delta30_pct,delta15_pct,delta5_pct,source'
-  const lines = rows.map(r=>[new Date(r.t).toISOString(), r.slot, r.d60??'', r.d30??'', r.d15??'', r.d5??'', r.source??''].join(','))
+  const header='funding_close_utc,slot,delta60_pct,delta60_usd,delta30_pct,delta30_usd,delta15_pct,delta15_usd,delta5_pct,delta5_usd,source'
+  const lines = rows.map(r=>[new Date(r.t).toISOString(), r.slot, r.d60??'', r.d60Abs??'', r.d30??'', r.d30Abs??'', r.d15??'', r.d15Abs??'', r.d5??'', r.d5Abs??'', r.source??''].join(','))
   const csv=[header, ...lines].join('\n')
   const blob = new Blob([csv], {type:'text/csv'}); const url=URL.createObjectURL(blob)
   const a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
@@ -203,17 +207,17 @@ export default function App(){
           <div className='overflow-x-auto'>
             <table className='w-full text-xs'>
               <thead className='text-left opacity-70'>
-                <tr><th className='py-1 pr-3'>Funding Close (UTC)</th><th className='py-1 pr-3'>Slot</th><th className='py-1 pr-3'>Δ60m %</th><th className='py-1 pr-3'>Δ30m %</th><th className='py-1 pr-3'>Δ15m %</th><th className='py-1 pr-3'>Δ5m %</th><th className='py-1 pr-3'>Src</th></tr>
+                <tr><th className='py-1 pr-3'>Funding Close (UTC)</th><th className='py-1 pr-3'>Slot</th><th className='py-1 pr-3'>Δ60m % (USD)</th><th className='py-1 pr-3'>Δ30m % (USD)</th><th className='py-1 pr-3'>Δ15m % (USD)</th><th className='py-1 pr-3'>Δ5m % (USD)</th><th className='py-1 pr-3'>Src</th></tr>
               </thead>
               <tbody>
                 {rows.map(r => (
                   <tr key={r.t} className='border-t border-neutral-800'>
                     <td className='py-1 pr-3'>{new Date(r.t).toUTCString()}</td>
                     <td className='py-1 pr-3'>{r.slot}</td>
-                    <td className='py-1 pr-3'>{r.d60==null?'—':r.d60.toFixed(3)}</td>
-                    <td className='py-1 pr-3'>{r.d30==null?'—':r.d30.toFixed(3)}</td>
-                    <td className='py-1 pr-3'>{r.d15==null?'—':r.d15.toFixed(3)}</td>
-                    <td className='py-1 pr-3'>{r.d5==null?'—':r.d5.toFixed(3)}</td>
+                    <td className='py-1 pr-3'>{r.d60==null?'—':`${r.d60.toFixed(3)}% ($${(r.d60Abs??0).toFixed(2)})`}</td>
+                    <td className='py-1 pr-3'>{r.d30==null?'—':`${r.d30.toFixed(3)}% ($${(r.d30Abs??0).toFixed(2)})`}</td>
+                    <td className='py-1 pr-3'>{r.d15==null?'—':`${r.d15.toFixed(3)}% ($${(r.d15Abs??0).toFixed(2)})`}</td>
+                    <td className='py-1 pr-3'>{r.d5==null?'—':`${r.d5.toFixed(3)}% ($${(r.d5Abs??0).toFixed(2)})`}</td>
                     <td className='py-1 pr-3'>{r.source}</td>
                   </tr>
                 ))}
