@@ -1,23 +1,21 @@
 
-Futures Drift — Kraken vs Binance (v3)
+Kraken Futures — Funding Drift (v4, Kraken-only)
 
-✅ Features
-- Auto-detect funding cadence per venue (uses nextFundingTime if available; else aligns 4h/8h to UTC grid)
-- Live mark price stream (Kraken WS ticker, Binance markPrice@1s) + countdown to next close
-- Symbol switcher with localStorage persistence (Kraken: PI_XBTUSD, PI_ETHUSD; Binance: BTCUSDT, ETHUSDT)
-- Source badge for Kraken rows (futures.ohlc, futures.trades, spot.ohlc)
-- CSV export for per-event rows and aggregated slot metrics for each venue
-- Resilience: fetch retries with exponential backoff + status chips in header
-- Side-by-side comparison: Kraken and Binance drift tables & aggregates
+Features
+- Single-venue (Kraken) simulation of price drift into funding close (Δ60/30/15/5m)
+- Auto-detect funding cadence from Kraken tickers if available; fallback to 4h/8h grid
+- Live mark stream (WS) + countdown to next close
+- Symbol switcher: PI_XBTUSD / PI_ETHUSD (persisted)
+- CSV export: per-event rows & aggregated slot averages
+- Resilient fetch with backoff; clear status chip
+- Default lookback (Hours) set to 16
 
-Netlify Deploy
-- Base directory: repo root
-- Build command: `cd apps/btc-futures && npm install --no-audit --no-fund && npm run build`
-- Publish directory: `apps/btc-futures/dist`
-- Functions directory: `apps/btc-futures/netlify/functions`
+Deploy (Netlify)
+- Build: `cd apps/btc-futures && npm install --no-audit --no-fund && npm run build`
+- Publish: `apps/btc-futures/dist`
+- Functions: `apps/btc-futures/netlify/functions`
 - Node: 18 (.nvmrc included)
 
 Notes
-- Kraken OHLC tries Futures first, then Futures trades→1m, then Spot OHLC (XBTUSD) as final fallback.
-- Binance uses public klines and premiumIndex for funding timing check.
-- All endpoints are public and proxied via Netlify functions to avoid CORS.
+- Uses Netlify proxies: `/.netlify/functions/kraken` and `/krakenSpot` to avoid CORS.
+- OHLC order: Futures OHLC → Futures trades aggregated to 1m → Spot OHLC fallback (XBTUSD).

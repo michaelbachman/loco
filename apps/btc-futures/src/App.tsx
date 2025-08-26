@@ -1,17 +1,17 @@
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import './index.css'
-import { KrakenFuturesClient, OhlcResult } from './lib/krakenClient'
-import { BinanceFuturesClient } from './lib/binanceClient'
+import { KrakenFuturesClient } from './lib/krakenClient'
 import { Ohlc, pct, closesInRange, nearestBarBefore } from './lib/util'
 
-const kraken = new KrakenFuturesClient()
-const binance = new BinanceFuturesClient()
+const client = new KrakenFuturesClient()
+const DEFAULT_SYMBOL = 'PI_XBTUSD'
 
 type DriftRow = { t:number; slot:string; d60:number|null; d30:number|null; d15:number|null; d5:number|null; source?:string }
 
 function formatSlotLabel(h:number, interval:number){
   if(interval===8) return h%24===0?'00:00':h%24===8?'08:00':'16:00'
+  if(interval===4) return ['00:00','04:00','08:00','12:00','16:00','20:00'][Math.floor((h%24)/4)]
   return (h%24).toString().padStart(2,'0')+':00'
 }
 
@@ -81,102 +81,66 @@ function useLocalStorage<T>(key:string, init:T){
 }
 
 export default function App(){
-  const [hours, setHours] = useLocalStorage<number>('hours', 24)
-  const [krSymbol, setKrSymbol] = useLocalStorage<string>('kr_symbol', 'PI_XBTUSD')
-  const [bzSymbol, setBzSymbol] = useLocalStorage<string>('bz_symbol', 'BTCUSDT')
+  // Default "Hours" to 16 (lookback window)
+  const [hours, setHours] = useLocalStorage<number>('hours', 16)
+  const [symbol, setSymbol] = useLocalStorage<string>('kr_symbol', DEFAULT_SYMBOL)
   const [intervalMode, setIntervalMode] = useLocalStorage<'auto'|'manual'>('interval_mode','auto')
   const [manualInterval, setManualInterval] = useLocalStorage<number>('manual_interval', 4)
 
-  const [krInterval, setKrInterval] = useState<number>(4) // autodetected later
-  const [bzInterval, setBzInterval] = useState<number>(8)
-
+  const [krInterval, setKrInterval] = useState<number>(4) // auto-detected later
   const [krMark, setKrMark] = useState<number|undefined>(undefined)
-  const [bzMark, setBzMark] = useState<number|undefined>(undefined)
 
-  const [krStatus, setKrStatus] = useState<'idle'|'fetching'|'ok'|'error'>('idle')
-  const [bzStatus, setBzStatus] = useState<'idle'|'fetching'|'ok'|'error'>('idle')
-
-  const [krRows, setKrRows] = useState<DriftRow[]|null>(null)
-  const [bzRows, setBzRows] = useState<DriftRow[]|null>(null)
-  const [krAgg, setKrAgg] = useState<any[]|null>(null)
-  const [bzAgg, setBzAgg] = useState<any[]|null>(null)
+  const [status, setStatus] = useState<'idle'|'fetching'|'ok'|'error'>('idle')
+  const [rows, setRows] = useState<DriftRow[]|null>(null)
+  const [agg, setAgg] = useState<any[]|null>(null)
   const [err, setErr] = useState<string | null>(null)
 
-  // Live marks
+  // Live mark via Kraken WS
   useEffect(()=>{
-    // Kraken WS
     const ws = new WebSocket('wss://futures.kraken.com/ws/v1')
-    ws.onopen = ()=> ws.send(JSON.stringify({ event:'subscribe', feed:'ticker', product_ids:[krSymbol] }))
-    ws.onmessage = (e)=> { try{ const m=JSON.parse(e.data as string); if(m.feed==='ticker' && m.product_id===krSymbol){ const p = Number(m.markPrice ?? m.last ?? m.price); if(!Number.isNaN(p)) setKrMark(p) } }catch{} }
-    ws.onerror = ()=>{}; ws.onclose=()=>{}
+    ws.onopen = ()=> ws.send(JSON.stringify({ event:'subscribe', feed:'ticker', product_ids:[symbol] }))
+    ws.onmessage = (e)=> { try{ const m=JSON.parse(e.data as string); if(m.feed==='ticker' && m.product_id===symbol){ const p = Number(m.markPrice ?? m.last ?? m.price); if(!Number.isNaN(p)) setKrMark(p) } }catch{} }
     return ()=>{ try{ws.close()}catch{} }
-  },[krSymbol])
+  },[symbol])
 
-  useEffect(()=>{
-    const sub = binance.subscribeMark(bzSymbol, (p)=> setBzMark(p))
-    return ()=> sub.close()
-  },[bzSymbol])
-
-  // Autodetect funding interval
+  // Autodetect funding interval from ticker nextFundingTime when available
   useEffect(()=>{ (async()=>{
-    if(intervalMode==='manual'){ setKrInterval(manualInterval); setBzInterval(manualInterval===4?8:8); return }
+    if(intervalMode==='manual'){ setKrInterval(manualInterval); return }
     try{
-      const [krt, bpi] = await Promise.allSettled([ kraken.getTickers(), binance.getPremiumIndex(bzSymbol) ])
-      // Kraken: infer 4h if nextFundingTime aligns better with 4h grid
+      const tickers = await client.getTickers()
+      const item = tickers.find(t=>t.symbol===symbol)
       let kInt = 4
-      if(krt.status==='fulfilled'){
-        const item = krt.value.find(t=>t.symbol===krSymbol)
-        const nft = item?.nextFundingTime
-        if(nft){
-          const now = Date.now()
-          const deltas = [4,8].map(h=> Math.abs(nextBoundary(now,h)-nft))
-          kInt = deltas[0] <= deltas[1] ? 4 : 8
-        }
+      if(item?.nextFundingTime){
+        const now = Date.now()
+        const deltas = [4,8].map(h=> Math.abs(nextBoundary(now,h)-item.nextFundingTime!))
+        kInt = deltas[0] <= deltas[1] ? 4 : 8
       }
       setKrInterval(kInt)
-      // Binance: default 8h; validate via premiumIndex
-      let bInt = 8
-      if(bpi.status==='fulfilled'){
-        const nft = Number(bpi.value?.nextFundingTime ?? 0)
-        if(nft){
-          const now = Date.now()
-          const deltas = [4,8].map(h=> Math.abs(nextBoundary(now,h)-nft))
-          bInt = deltas[0] < deltas[1] ? 4 : 8
-        }
-      }
-      setBzInterval(bInt)
-    }catch{}
-  })() },[intervalMode, manualInterval, krSymbol, bzSymbol])
+    }catch{ setKrInterval(4) }
+  })() },[intervalMode, manualInterval, symbol])
 
   // Fetch + compute drift
   useEffect(()=>{ (async()=>{
-    setErr(null as any)
+    setErr(null)
     const end=Date.now(), start=end - hours*3600*1000
-    // Kraken
     try{
-      setKrStatus('fetching')
-      const kr = await kraken.getOhlc(krSymbol, '1m', { since: start - 70*60*1000, until: end })
-      const kcl = closesInRange(start,end, krInterval)
-      const krows = computeRows(kr.bars, kcl, krInterval, kr.source)
-      setKrRows(krows); setKrAgg(aggregate(krows, krInterval===8? ['00:00','08:00','16:00']: ['00:00','04:00','08:00','12:00','16:00','20:00'])); setKrStatus('ok')
-    }catch(e:any){ setKrStatus('error'); setErr(String(e?.message||e)) }
-
-    // Binance
-    try{
-      setBzStatus('fetching')
-      const bars = await binance.getKlines(bzSymbol, '1m', { startTime: start - 70*60*1000, endTime: end, limit: 2000 })
-      const bcl = closesInRange(start,end, bzInterval)
-      const brows = computeRows(bars, bcl, bzInterval, 'futures.ohlc')
-      setBzRows(brows); setBzAgg(aggregate(brows, bzInterval===8? ['00:00','08:00','16:00']: ['00:00','04:00','08:00','12:00','16:00','20:00'])); setBzStatus('ok')
-    }catch(e:any){ setBzStatus('error'); setErr((prev: string | null)=> (prev? prev+' | ': '') + String(e?.message||e)) }
-  })() },[hours, krSymbol, bzSymbol, krInterval, bzInterval])
+      setStatus('fetching')
+      const res = await client.getOhlc(symbol, '1m', { since: start - 70*60*1000, until: end })
+      const closes = closesInRange(start, end, krInterval)
+      const rows0 = computeRows(res.bars, closes, krInterval, res.source)
+      setRows(rows0)
+      const slots = krInterval===8? ['00:00','08:00','16:00']: ['00:00','04:00','08:00','12:00','16:00','20:00']
+      setAgg(aggregate(rows0, slots))
+      setStatus('ok')
+    }catch(e:any){
+      setStatus('error')
+      setErr(String(e?.message || e))
+      setRows(null); setAgg(null)
+    }
+  })() },[hours, symbol, krInterval])
 
   const now = Date.now()
-  const krNext = nextBoundary(now, krInterval)
-  const bzNext = nextBoundary(now, bzInterval)
-  const [tick, setTick] = useState(0)
-  useEffect(()=>{ const t=setInterval(()=>setTick(x=>x+1), 1000); return ()=>clearInterval(t) },[])
-
+  const next = nextBoundary(now, krInterval)
   function formatCountdown(ms:number){
     const s=Math.max(0, Math.floor(ms/1000)); const hh=Math.floor(s/3600), mm=Math.floor((s%3600)/60), ss=s%60
     return `${hh.toString().padStart(2,'0')}:${mm.toString().padStart(2,'0')}:${ss.toString().padStart(2,'0')}`
@@ -192,61 +156,23 @@ export default function App(){
   return (
     <div className='min-h-screen bg-neutral-900 text-neutral-100 p-6'>
       <header className='flex items-center justify-between mb-4'>
-        <h1 className='text-3xl' style={{ fontFamily:'Creepster, system-ui' }}>Futures Drift — Kraken vs Binance</h1>
+        <h1 className='text-3xl' style={{ fontFamily:'Creepster, system-ui' }}>Kraken Futures — Funding Drift</h1>
         <div className='flex items-center gap-2 text-xs'>
-          <span>Kraken</span>{statusChip(krStatus)}
-          <span>Binance</span>{statusChip(bzStatus)}
+          <span>Status</span>{statusChip(status)}
+          <span>Next Funding Close: {new Date(next).toUTCString()} ({formatCountdown(next - Date.now())})</span>
         </div>
       </header>
 
-      <div className='text-xs opacity-70 mb-2'>Data: Kraken Futures (falls back to Spot if needed) & Binance Futures. Drift into funding closes; 1m bars.</div>
-
-      <div className='grid md:grid-cols-2 gap-4 mb-4'>
-        <div className='rounded-2xl p-4 bg-neutral-800/60'>
-          <div className='flex items-center justify-between mb-2'>
-            <div className='font-semibold'>Kraken</div>
-            <div className='text-xs opacity-80'>Next: {new Date(krNext).toUTCString()} ({formatCountdown(krNext - Date.now())})</div>
-          </div>
-          <div className='flex flex-wrap items-end gap-2 text-sm'>
-            <label>Symbol
-              <select value={krSymbol} onChange={e=>setKrSymbol(e.target.value)} className='ml-2 bg-neutral-800 border border-neutral-700 rounded px-2 py-1'>
-                <option>PI_XBTUSD</option>
-                <option>PI_ETHUSD</option>
-              </select>
-            </label>
-            <div className='opacity-80'>Mark: {krMark? krMark.toLocaleString(): '—'}</div>
-            <div className='opacity-80'>Interval: {intervalMode==='auto'? (krInterval+'h (auto)') : (manualInterval+'h')}</div>
-            <div className='opacity-80'>Rows: {krRows?.length ?? 0}</div>
-          </div>
-        </div>
-
-        <div className='rounded-2xl p-4 bg-neutral-800/60'>
-          <div className='flex items-center justify-between mb-2'>
-            <div className='font-semibold'>Binance</div>
-            <div className='text-xs opacity-80'>Next: {new Date(bzNext).toUTCString()} ({formatCountdown(bzNext - Date.now())})</div>
-          </div>
-          <div className='flex flex-wrap items-end gap-2 text-sm'>
-            <label>Symbol
-              <select value={bzSymbol} onChange={e=>setBzSymbol(e.target.value)} className='ml-2 bg-neutral-800 border border-neutral-700 rounded px-2 py-1'>
-                <option>BTCUSDT</option>
-                <option>ETHUSDT</option>
-              </select>
-            </label>
-            <div className='opacity-80'>Mark: {bzMark? bzMark.toLocaleString(): '—'}</div>
-            <div className='opacity-80'>Interval: {intervalMode==='auto'? (bzInterval+'h (auto)') : (manualInterval+'h')}</div>
-            <div className='opacity-80'>Rows: {bzRows?.length ?? 0}</div>
-          </div>
-        </div>
-      </div>
+      <div className='text-xs opacity-70 mb-2'>Data: Kraken Futures (falls back to Kraken Spot OHLC if needed). Drift into funding closes; 1m bars. Default lookback = 16 hours.</div>
 
       <div className='rounded-2xl p-4 bg-neutral-800/60 mb-4'>
         <div className='flex flex-wrap items-end gap-3 text-sm'>
-          <label>Hours
+          <label>Hours (lookback)
             <input type='number' min={1} max={72} value={hours} onChange={e=>setHours(Number(e.target.value))} className='ml-2 w-24 bg-neutral-800 border border-neutral-700 rounded px-2 py-1' />
           </label>
           <label>Funding Interval
             <select value={intervalMode} onChange={e=>setIntervalMode(e.target.value as any)} className='ml-2 bg-neutral-800 border border-neutral-700 rounded px-2 py-1'>
-              <option value='auto'>Auto-detect per venue</option>
+              <option value='auto'>Auto-detect</option>
               <option value='manual'>Manual</option>
             </select>
           </label>
@@ -256,116 +182,74 @@ export default function App(){
               <option value={8}>8h</option>
             </select>
           )}
+          <label>Symbol
+            <select value={symbol} onChange={e=>setSymbol(e.target.value)} className='ml-2 bg-neutral-800 border border-neutral-700 rounded px-2 py-1'>
+              <option>PI_XBTUSD</option>
+              <option>PI_ETHUSD</option>
+            </select>
+          </label>
+          <div className='opacity-80'>Mark: {krMark? krMark.toLocaleString(): '—'}</div>
+          <div className='opacity-80'>Interval: {intervalMode==='auto'? (krInterval+'h (auto)') : (manualInterval+'h')}</div>
           <div className='ml-auto flex gap-2'>
-            <button onClick={()=> krRows && exportCsvRows(krRows,'kraken_drift_rows.csv')} className='px-3 py-1.5 rounded bg-neutral-100 text-neutral-900 disabled:opacity-50' disabled={!krRows || krRows.length===0}>Export Kraken Rows</button>
-            <button onClick={()=> krAgg && exportCsvAgg(krAgg,'kraken_drift_agg.csv')} className='px-3 py-1.5 rounded bg-neutral-100 text-neutral-900 disabled:opacity-50' disabled={!krAgg || krAgg.length===0}>Export Kraken Aggregates</button>
-            <button onClick={()=> bzRows && exportCsvRows(bzRows,'binance_drift_rows.csv')} className='px-3 py-1.5 rounded bg-neutral-100 text-neutral-900 disabled:opacity-50' disabled={!bzRows || bzRows.length===0}>Export Binance Rows</button>
-            <button onClick={()=> bzAgg && exportCsvAgg(bzAgg,'binance_drift_agg.csv')} className='px-3 py-1.5 rounded bg-neutral-100 text-neutral-900 disabled:opacity-50' disabled={!bzAgg || bzAgg.length===0}>Export Binance Aggregates</button>
+            <button onClick={()=> rows && exportCsvRows(rows,'kraken_drift_rows.csv')} className='px-3 py-1.5 rounded bg-neutral-100 text-neutral-900 disabled:opacity-50' disabled={!rows || rows.length===0}>Export Rows</button>
+            <button onClick={()=> agg && exportCsvAgg(agg,'kraken_drift_agg.csv')} className='px-3 py-1.5 rounded bg-neutral-100 text-neutral-900 disabled:opacity-50' disabled={!agg || agg.length===0}>Export Aggregates</button>
           </div>
         </div>
       </div>
 
-      <div className='grid md:grid-cols-2 gap-4'>
-        <div className='rounded-2xl p-4 bg-neutral-800/60'>
-          <div className='opacity-80 mb-2'>Kraken — Per-event drift (source: {krRows && krRows[0]?.source || '—'})</div>
-          {krRows && krRows.length>0 ? (
-            <div className='overflow-x-auto'>
-              <table className='w-full text-xs'>
-                <thead className='text-left opacity-70'>
-                  <tr><th className='py-1 pr-3'>Funding Close (UTC)</th><th className='py-1 pr-3'>Slot</th><th className='py-1 pr-3'>Δ60m %</th><th className='py-1 pr-3'>Δ30m %</th><th className='py-1 pr-3'>Δ15m %</th><th className='py-1 pr-3'>Δ5m %</th><th className='py-1 pr-3'>Src</th></tr>
-                </thead>
-                <tbody>
-                  {krRows.map(r => (
-                    <tr key={r.t} className='border-t border-neutral-800'>
-                      <td className='py-1 pr-3'>{new Date(r.t).toUTCString()}</td>
-                      <td className='py-1 pr-3'>{r.slot}</td>
-                      <td className='py-1 pr-3'>{r.d60==null?'—':r.d60.toFixed(3)}</td>
-                      <td className='py-1 pr-3'>{r.d30==null?'—':r.d30.toFixed(3)}</td>
-                      <td className='py-1 pr-3'>{r.d15==null?'—':r.d15.toFixed(3)}</td>
-                      <td className='py-1 pr-3'>{r.d5==null?'—':r.d5.toFixed(3)}</td>
-                      <td className='py-1 pr-3'>{r.source}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : <div>No funding closes in range. Increase Hours.</div>}
-          <div className='opacity-80 mt-3 mb-1'>Kraken — Aggregated by slot</div>
-          {krAgg && (
-            <div className='overflow-x-auto'>
-              <table className='w-full text-xs'>
-                <thead className='text-left opacity-70'>
-                  <tr><th className='py-1 pr-3'>Slot</th><th className='py-1 pr-3'>Obs</th><th className='py-1 pr-3'>Avg Δ60m %</th><th className='py-1 pr-3'>Avg Δ30m %</th><th className='py-1 pr-3'>Avg Δ15m %</th><th className='py-1 pr-3'>Avg Δ5m %</th></tr>
-                </thead>
-                <tbody>
-                  {krAgg.map(a => (
-                    <tr key={a.slot} className='border-t border-neutral-800'>
-                      <td className='py-1 pr-3'>{a.slot}</td>
-                      <td className='py-1 pr-3'>{a.n}</td>
-                      <td className='py-1 pr-3'>{a.a60==null?'—':a.a60.toFixed(3)}</td>
-                      <td className='py-1 pr-3'>{a.a30==null?'—':a.a30.toFixed(3)}</td>
-                      <td className='py-1 pr-3'>{a.a15==null?'—':a.a15.toFixed(3)}</td>
-                      <td className='py-1 pr-3'>{a.a5==null?'—':a.a5.toFixed(3)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+      <div className='rounded-2xl p-4 bg-neutral-800/60'>
+        <div className='opacity-80 mb-2'>Per-event drift (source: {rows && rows[0]?.source || '—'})</div>
+        {rows && rows.length>0 ? (
+          <div className='overflow-x-auto'>
+            <table className='w-full text-xs'>
+              <thead className='text-left opacity-70'>
+                <tr><th className='py-1 pr-3'>Funding Close (UTC)</th><th className='py-1 pr-3'>Slot</th><th className='py-1 pr-3'>Δ60m %</th><th className='py-1 pr-3'>Δ30m %</th><th className='py-1 pr-3'>Δ15m %</th><th className='py-1 pr-3'>Δ5m %</th><th className='py-1 pr-3'>Src</th></tr>
+              </thead>
+              <tbody>
+                {rows.map(r => (
+                  <tr key={r.t} className='border-t border-neutral-800'>
+                    <td className='py-1 pr-3'>{new Date(r.t).toUTCString()}</td>
+                    <td className='py-1 pr-3'>{r.slot}</td>
+                    <td className='py-1 pr-3'>{r.d60==null?'—':r.d60.toFixed(3)}</td>
+                    <td className='py-1 pr-3'>{r.d30==null?'—':r.d30.toFixed(3)}</td>
+                    <td className='py-1 pr-3'>{r.d15==null?'—':r.d15.toFixed(3)}</td>
+                    <td className='py-1 pr-3'>{r.d5==null?'—':r.d5.toFixed(3)}</td>
+                    <td className='py-1 pr-3'>{r.source}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <div>No funding closes in range. Increase Hours.</div>}
 
-        <div className='rounded-2xl p-4 bg-neutral-800/60'>
-          <div className='opacity-80 mb-2'>Binance — Per-event drift</div>
-          {bzRows && bzRows.length>0 ? (
-            <div className='overflow-x-auto'>
-              <table className='w-full text-xs'>
-                <thead className='text-left opacity-70'>
-                  <tr><th className='py-1 pr-3'>Funding Close (UTC)</th><th className='py-1 pr-3'>Slot</th><th className='py-1 pr-3'>Δ60m %</th><th className='py-1 pr-3'>Δ30m %</th><th className='py-1 pr-3'>Δ15m %</th><th className='py-1 pr-3'>Δ5m %</th></tr>
-                </thead>
-                <tbody>
-                  {bzRows.map(r => (
-                    <tr key={r.t} className='border-t border-neutral-800'>
-                      <td className='py-1 pr-3'>{new Date(r.t).toUTCString()}</td>
-                      <td className='py-1 pr-3'>{r.slot}</td>
-                      <td className='py-1 pr-3'>{r.d60==null?'—':r.d60.toFixed(3)}</td>
-                      <td className='py-1 pr-3'>{r.d30==null?'—':r.d30.toFixed(3)}</td>
-                      <td className='py-1 pr-3'>{r.d15==null?'—':r.d15.toFixed(3)}</td>
-                      <td className='py-1 pr-3'>{r.d5==null?'—':r.d5.toFixed(3)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : <div>No funding closes in range. Increase Hours.</div>}
-          <div className='opacity-80 mt-3 mb-1'>Binance — Aggregated by slot</div>
-          {bzAgg && (
-            <div className='overflow-x-auto'>
-              <table className='w-full text-xs'>
-                <thead className='text-left opacity-70'>
-                  <tr><th className='py-1 pr-3'>Slot</th><th className='py-1 pr-3'>Obs</th><th className='py-1 pr-3'>Avg Δ60m %</th><th className='py-1 pr-3'>Avg Δ30m %</th><th className='py-1 pr-3'>Avg Δ15m %</th><th className='py-1 pr-3'>Avg Δ5m %</th></tr>
-                </thead>
-                <tbody>
-                  {bzAgg.map(a => (
-                    <tr key={a.slot} className='border-t border-neutral-800'>
-                      <td className='py-1 pr-3'>{a.slot}</td>
-                      <td className='py-1 pr-3'>{a.n}</td>
-                      <td className='py-1 pr-3'>{a.a60==null?'—':a.a60.toFixed(3)}</td>
-                      <td className='py-1 pr-3'>{a.a30==null?'—':a.a30.toFixed(3)}</td>
-                      <td className='py-1 pr-3'>{a.a15==null?'—':a.a15.toFixed(3)}</td>
-                      <td className='py-1 pr-3'>{a.a5==null?'—':a.a5.toFixed(3)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        <div className='opacity-80 mt-3 mb-1'>Aggregated by slot</div>
+        {agg && (
+          <div className='overflow-x-auto'>
+            <table className='w-full text-xs'>
+              <thead className='text-left opacity-70'>
+                <tr><th className='py-1 pr-3'>Slot</th><th className='py-1 pr-3'>Obs</th><th className='py-1 pr-3'>Avg Δ60m %</th><th className='py-1 pr-3'>Avg Δ30m %</th><th className='py-1 pr-3'>Avg Δ15m %</th><th className='py-1 pr-3'>Avg Δ5m %</th></tr>
+              </thead>
+              <tbody>
+                {agg.map(a => (
+                  <tr key={a.slot} className='border-t border-neutral-800'>
+                    <td className='py-1 pr-3'>{a.slot}</td>
+                    <td className='py-1 pr-3'>{a.n}</td>
+                    <td className='py-1 pr-3'>{a.a60==null?'—':a.a60.toFixed(3)}</td>
+                    <td className='py-1 pr-3'>{a.a30==null?'—':a.a30.toFixed(3)}</td>
+                    <td className='py-1 pr-3'>{a.a15==null?'—':a.a15.toFixed(3)}</td>
+                    <td className='py-1 pr-3'>{a.a5==null?'—':a.a5.toFixed(3)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {err && <div className='mt-4 text-red-300 text-xs break-words'>Error: {err}</div>}
 
       <footer className='mt-8 opacity-60 text-xs'>
-        Autodetect funding interval uses nextFundingTime when available; otherwise aligns to 4h/8h UTC grids. Data is heuristic; trade carefully.
+        Funding cadence auto-detect uses Kraken tickers when available; otherwise aligns to 4h/8h UTC grids. Default lookback window is 16 hours.
       </footer>
     </div>
   )

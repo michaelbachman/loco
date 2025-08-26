@@ -29,7 +29,7 @@ export class KrakenFuturesClient {
   }
   private async getSpot<T>(path:string, params?:Record<string,any>, retries=2): Promise<T> {
     const qs = new URLSearchParams(); if(params) for(const [k,v] of Object.entries(params)) if(v!==undefined&&v!==null) qs.set(k,String(v))
-    const url = `${'/.netlify/functions/krakenSpot'}?path=${encodeURIComponent(path)}&qs=${encodeURIComponent(qs.toString())}`
+    const url = `${this.spotProxy}?path=${encodeURIComponent(path)}&qs=${encodeURIComponent(qs.toString())}`
     for(let i=0;i<=retries;i++){
       const r = await this.fetcher(url,{headers:{Accept:'application/json'}})
       if(r.ok) return r.json() as Promise<T>
