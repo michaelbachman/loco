@@ -196,6 +196,7 @@ export default function App() {
           <span className='px-3 py-1.5 rounded-full border bg-neutral-100 text-neutral-900 border-neutral-100'>SIMULATE</span>
         </nav>
       </header>
+      <div className='text-xs opacity-70 mb-2'>Data source: Kraken Futures; falls back to Kraken Spot OHLC if futures endpoints are unavailable.</div>
       <div className='grid gap-4'>
         <Panel title='Funding Drift Simulation (last N hours)'>
           <Simulate />
