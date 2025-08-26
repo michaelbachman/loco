@@ -7,7 +7,7 @@ import { Ohlc, pct, closesInRange, nearestBarBefore } from './lib/util'
 const client = new KrakenFuturesClient()
 const DEFAULT_SYMBOL = 'PI_XBTUSD'
 
-type DriftRow = { t:number; slot:string; d60:number|null; d30:number|null; d15:number|null; d5:number|null; d60Abs:number|null; d30Abs:number|null; d15Abs:number|null; d5Abs:number|null; source?:string p1m:number|null d1m:number|null; d1mAbs:number|null }
+type DriftRow = { t:number; slot:string; d60:number|null; d30:number|null; d15:number|null; d5:number|null; d60Abs:number|null; d30Abs:number|null; d15Abs:number|null; d5Abs:number|null; p1m:number|null; d1m:number|null; d1mAbs:number|null; source?:string }
 
 function formatSlotLabel(h:number, interval:number){
   if(interval===8) return h%24===0?'00:00':h%24===8?'08:00':'16:00'
