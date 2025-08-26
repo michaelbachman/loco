@@ -7,7 +7,7 @@ import { Ohlc, pct, closesInRange, nearestBarBefore } from './lib/util'
 const client = new KrakenFuturesClient()
 const DEFAULT_SYMBOL = 'PI_XBTUSD'
 
-type DriftRow = { t:number; slot:string; d60:number|null; d30:number|null; d15:number|null; d5:number|null; d60Abs:number|null; d30Abs:number|null; d15Abs:number|null; d5Abs:number|null; source?:string }
+type DriftRow = { t:number; slot:string; d60:number|null; d30:number|null; d15:number|null; d5:number|null; d60Abs:number|null; d30Abs:number|null; d15Abs:number|null; d5Abs:number|null; source?:string p1m:number|null d1m:number|null; d1mAbs:number|null }
 
 function formatSlotLabel(h:number, interval:number){
   if(interval===8) return h%24===0?'00:00':h%24===8?'08:00':'16:00'
@@ -19,8 +19,11 @@ function computeRows(bars:Ohlc[], closes:number[], interval:number, source?:stri
   const wins=[60,30,15,5]
   return closes.map(t=>{
     const end=nearestBarBefore(bars,t)
+    const oneMin=nearestBarBefore(bars, t - 1*60*1000)
+    if(oneMin){ r.p1m = oneMin.close }
+    if(end && oneMin){ r.d1m = pct(end.close, oneMin.close); r.d1mAbs = end.close - oneMin.close }
     const slot = formatSlotLabel(new Date(t).getUTCHours(), interval)
-    const r: DriftRow = { t, slot, d60:null, d30:null, d15:null, d5:null, d60Abs:null, d30Abs:null, d15Abs:null, d5Abs:null, source }
+    const r: DriftRow = { t, slot, d60:null, d30:null, d15:null, d5:null, d60Abs:null, d30Abs:null, d15Abs:null, d5Abs:null, p1m:null, d1m:null, d1mAbs:null, source }
     if(end){
       for(const m of wins){
         const beg=nearestBarBefore(bars, t - m*60*1000)
@@ -56,8 +59,8 @@ function aggregate(rows:DriftRow[], slots:string[]){
 }
 
 function exportCsvRows(rows:DriftRow[], name:string){
-  const header='funding_close_utc,slot,delta60_pct,delta60_usd,delta30_pct,delta30_usd,delta15_pct,delta15_usd,delta5_pct,delta5_usd,source'
-  const lines = rows.map(r=>[new Date(r.t).toISOString(), r.slot, r.d60??'', r.d60Abs??'', r.d30??'', r.d30Abs??'', r.d15??'', r.d15Abs??'', r.d5??'', r.d5Abs??'', r.source??''].join(','))
+  const header='funding_close_utc,slot,t_minus_1m_price,delta1m_pct,delta1m_usd,delta60_pct,delta60_usd,delta30_pct,delta30_usd,delta15_pct,delta15_usd,delta5_pct,delta5_usd,source'
+  const lines = rows.map(r=>[new Date(r.t).toISOString(), r.slot, r.p1m??'', r.d1m??'', r.d1mAbs??'', r.d60??'', r.d60Abs??'', r.d30??'', r.d30Abs??'', r.d15??'', r.d15Abs??'', r.d5??'', r.d5Abs??'', r.source??''].join(','))
   const csv=[header, ...lines].join('\n')
   const blob = new Blob([csv], {type:'text/csv'}); const url=URL.createObjectURL(blob)
   const a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
@@ -207,13 +210,15 @@ export default function App(){
           <div className='overflow-x-auto'>
             <table className='w-full text-xs'>
               <thead className='text-left opacity-70'>
-                <tr><th className='py-1 pr-3'>Funding Close (UTC)</th><th className='py-1 pr-3'>Slot</th><th className='py-1 pr-3'>Δ60m % (USD)</th><th className='py-1 pr-3'>Δ30m % (USD)</th><th className='py-1 pr-3'>Δ15m % (USD)</th><th className='py-1 pr-3'>Δ5m % (USD)</th><th className='py-1 pr-3'>Src</th></tr>
+                <tr><th className='py-1 pr-3'>Funding Close (UTC)</th><th className='py-1 pr-3'>Slot</th><th className='py-1 pr-3'>T-1m Price</th><th className='py-1 pr-3'>Δ1m % (USD)</th><th className='py-1 pr-3'>Δ60m % (USD)</th><th className='py-1 pr-3'>Δ30m % (USD)</th><th className='py-1 pr-3'>Δ15m % (USD)</th><th className='py-1 pr-3'>Δ5m % (USD)</th><th className='py-1 pr-3'>Src</th></tr>
               </thead>
               <tbody>
                 {rows.map(r => (
                   <tr key={r.t} className='border-t border-neutral-800'>
                     <td className='py-1 pr-3'>{new Date(r.t).toUTCString()}</td>
                     <td className='py-1 pr-3'>{r.slot}</td>
+                    <td className='py-1 pr-3'>{r.p1m==null?'—':r.p1m.toLocaleString(undefined,{maximumFractionDigits:2})}</td>
+                    <td className='py-1 pr-3'>{r.d1m==null?'—':`${r.d1m.toFixed(3)}% ($${(r.d1mAbs??0).toFixed(2)})`}</td>
                     <td className='py-1 pr-3'>{r.d60==null?'—':`${r.d60.toFixed(3)}% ($${(r.d60Abs??0).toFixed(2)})`}</td>
                     <td className='py-1 pr-3'>{r.d30==null?'—':`${r.d30.toFixed(3)}% ($${(r.d30Abs??0).toFixed(2)})`}</td>
                     <td className='py-1 pr-3'>{r.d15==null?'—':`${r.d15.toFixed(3)}% ($${(r.d15Abs??0).toFixed(2)})`}</td>
