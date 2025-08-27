@@ -12,6 +12,34 @@ type DriftRow = { t:number; slot:string; d60:number|null; d30:number|null; d15:n
 function formatSlotLabel(h:number, interval:number){
   if(interval===8) return h%24===0?'00:00':h%24===8?'08:00':'16:00'
   if(interval===4) return ['00:00','04:00','08:00','12:00','16:00','20:00'][Math.floor((h%24)/4)]
+  
+  const DriftCell: React.FC<{ pct:number|null; usd:number|null; buy:number|null }> = ({ pct, usd, buy }) => {
+    if (pct==null) return <>—</>;
+    const qty = (sizePct/100) * leverage; // effective BTC size
+    const pnl = (usd==null) ? null : qty * usd;
+    const exit = (buy==null || qty===0) ? null : buy + (targetUsd/qty);
+    const notional = (buy==null) ? null : buy * qty;
+    const margin = (buy==null) ? null : buy * (sizePct/100);
+    const disabled = (buy==null) || (pnl==null) || (exit==null);
+    const tt = `qty=${qty.toFixed(4)} BTC; notional=$${notional?.toFixed(2) ?? '—'}; margin=$${margin?.toFixed(2) ?? '—'}; ` +
+               `pnl = qty * Δ$ = ${qty.toFixed(4)} * $${usd?.toFixed?.(2) ?? '—'}; exit = entry + target/qty`;
+    return (
+      <div>
+        <div>{`${pct.toFixed(3)}% ($${(usd ?? 0).toFixed(2)})`}</div>
+        <div className={disabled ? 'opacity-40' : 'opacity-70'} title={tt}>
+          {buy==null ? '' :
+            `Buy @$${Number(buy).toLocaleString(undefined,{maximumFractionDigits:2})} • ` +
+            (pnl==null ? '' : `PnL $${pnl.toFixed(2)} • `) +
+            (notional==null ? '' : `Notional $${notional.toFixed(2)} • `) +
+            (margin==null ? '' : `Margin $${margin.toFixed(2)} • `) +
+            (exit==null ? '' : `Exit @$${Number(exit).toLocaleString(undefined,{maximumFractionDigits:2})}`)
+          }
+        </div>
+      </div>
+    );
+  }
+
+
   return (h%24).toString().padStart(2,'0')+':00'
 }
 
@@ -115,7 +143,35 @@ export default function App(){
     const ws = new WebSocket('wss://futures.kraken.com/ws/v1')
     ws.onopen = ()=> ws.send(JSON.stringify({ event:'subscribe', feed:'ticker', product_ids:[symbol] }))
     ws.onmessage = (e)=> { try{ const m=JSON.parse(e.data as string); if(m.feed==='ticker' && m.product_id===symbol){ const p = Number(m.markPrice ?? m.last ?? m.price); if(!Number.isNaN(p)) setKrMark(p) } }catch{} }
-    return ()=>{ try{ws.close()}catch{} }
+    
+  const DriftCell: React.FC<{ pct:number|null; usd:number|null; buy:number|null }> = ({ pct, usd, buy }) => {
+    if (pct==null) return <>—</>;
+    const qty = (sizePct/100) * leverage; // effective BTC size
+    const pnl = (usd==null) ? null : qty * usd;
+    const exit = (buy==null || qty===0) ? null : buy + (targetUsd/qty);
+    const notional = (buy==null) ? null : buy * qty;
+    const margin = (buy==null) ? null : buy * (sizePct/100);
+    const disabled = (buy==null) || (pnl==null) || (exit==null);
+    const tt = `qty=${qty.toFixed(4)} BTC; notional=$${notional?.toFixed(2) ?? '—'}; margin=$${margin?.toFixed(2) ?? '—'}; ` +
+               `pnl = qty * Δ$ = ${qty.toFixed(4)} * $${usd?.toFixed?.(2) ?? '—'}; exit = entry + target/qty`;
+    return (
+      <div>
+        <div>{`${pct.toFixed(3)}% ($${(usd ?? 0).toFixed(2)})`}</div>
+        <div className={disabled ? 'opacity-40' : 'opacity-70'} title={tt}>
+          {buy==null ? '' :
+            `Buy @$${Number(buy).toLocaleString(undefined,{maximumFractionDigits:2})} • ` +
+            (pnl==null ? '' : `PnL $${pnl.toFixed(2)} • `) +
+            (notional==null ? '' : `Notional $${notional.toFixed(2)} • `) +
+            (margin==null ? '' : `Margin $${margin.toFixed(2)} • `) +
+            (exit==null ? '' : `Exit @$${Number(exit).toLocaleString(undefined,{maximumFractionDigits:2})}`)
+          }
+        </div>
+      </div>
+    );
+  }
+
+
+  return ()=>{ try{ws.close()}catch{} }
   },[symbol])
 
   // Autodetect funding interval from ticker nextFundingTime when available
@@ -167,6 +223,34 @@ export default function App(){
       (s==='fetching'?'bg-yellow-200 text-yellow-900': s==='ok'?'bg-emerald-200 text-emerald-900': s==='error'?'bg-rose-200 text-rose-900':'bg-neutral-700 text-neutral-100')
     }>{s.toUpperCase()}</span>
   )
+
+  
+  const DriftCell: React.FC<{ pct:number|null; usd:number|null; buy:number|null }> = ({ pct, usd, buy }) => {
+    if (pct==null) return <>—</>;
+    const qty = (sizePct/100) * leverage; // effective BTC size
+    const pnl = (usd==null) ? null : qty * usd;
+    const exit = (buy==null || qty===0) ? null : buy + (targetUsd/qty);
+    const notional = (buy==null) ? null : buy * qty;
+    const margin = (buy==null) ? null : buy * (sizePct/100);
+    const disabled = (buy==null) || (pnl==null) || (exit==null);
+    const tt = `qty=${qty.toFixed(4)} BTC; notional=$${notional?.toFixed(2) ?? '—'}; margin=$${margin?.toFixed(2) ?? '—'}; ` +
+               `pnl = qty * Δ$ = ${qty.toFixed(4)} * $${usd?.toFixed?.(2) ?? '—'}; exit = entry + target/qty`;
+    return (
+      <div>
+        <div>{`${pct.toFixed(3)}% ($${(usd ?? 0).toFixed(2)})`}</div>
+        <div className={disabled ? 'opacity-40' : 'opacity-70'} title={tt}>
+          {buy==null ? '' :
+            `Buy @$${Number(buy).toLocaleString(undefined,{maximumFractionDigits:2})} • ` +
+            (pnl==null ? '' : `PnL $${pnl.toFixed(2)} • `) +
+            (notional==null ? '' : `Notional $${notional.toFixed(2)} • `) +
+            (margin==null ? '' : `Margin $${margin.toFixed(2)} • `) +
+            (exit==null ? '' : `Exit @$${Number(exit).toLocaleString(undefined,{maximumFractionDigits:2})}`)
+          }
+        </div>
+      </div>
+    );
+  }
+
 
   return (
     <div className='min-h-screen bg-neutral-900 text-neutral-100 p-6'>
@@ -237,10 +321,10 @@ export default function App(){
                     <td className='py-1 pr-3'>{r.slot}</td>
                     <td className='py-1 pr-3'>{r.p1m==null?'—':r.p1m.toLocaleString(undefined,{maximumFractionDigits:2})}</td>
                     <td className='py-1 pr-3'>{r.d1m==null?'—':`${r.d1m.toFixed(3)}% ($${(r.d1mAbs??0).toFixed(2)})`}</td>
-                    <td className='py-1 pr-3'>{r.d60==null?'—':`${r.d60.toFixed(3)}% ($${(r.d60Abs??0).toFixed(2)})`}</td>
-                    <td className='py-1 pr-3'>{r.d30==null?'—':`${r.d30.toFixed(3)}% ($${(r.d30Abs??0).toFixed(2)})`}</td>
-                    <td className='py-1 pr-3'>{r.d15==null?'—':`${r.d15.toFixed(3)}% ($${(r.d15Abs??0).toFixed(2)})`}</td>
-                    <td className='py-1 pr-3'>{r.d5==null?'—':`${r.d5.toFixed(3)}% ($${(r.d5Abs??0).toFixed(2)})`}</td>
+                    <td className='py-1 pr-3'>{r.d60==null?'—':(<div><div>{`${r.d60.toFixed(3)}% ($${(r.d60Abs??0).toFixed(2)})`}</div><div className='opacity-70'>{r.p60==null?'':`Buy @$${Number(r.p60).toLocaleString(undefined,{maximumFractionDigits:2})} • PnL $${(r.pnl60??0).toFixed(2)} • Exit @$${Number(r.exit60).toLocaleString(undefined,{maximumFractionDigits:2})}`}</div></div>)}</td>
+                    <td className='py-1 pr-3'>{r.d30==null?'—':(<div><div>{`${r.d30.toFixed(3)}% ($${(r.d30Abs??0).toFixed(2)})`}</div><div className='opacity-70'>{r.p30==null?'':`Buy @$${Number(r.p30).toLocaleString(undefined,{maximumFractionDigits:2})} • PnL $${(r.pnl30??0).toFixed(2)} • Exit @$${Number(r.exit30).toLocaleString(undefined,{maximumFractionDigits:2})}`}</div></div>)}</td>
+                    <td className='py-1 pr-3'>{r.d15==null?'—':(<div><div>{`${r.d15.toFixed(3)}% ($${(r.d15Abs??0).toFixed(2)})`}</div><div className='opacity-70'>{r.p15==null?'':`Buy @$${Number(r.p15).toLocaleString(undefined,{maximumFractionDigits:2})} • PnL $${(r.pnl15??0).toFixed(2)} • Exit @$${Number(r.exit15).toLocaleString(undefined,{maximumFractionDigits:2})}`}</div></div>)}</td>
+                    <td className='py-1 pr-3'>{r.d5==null?'—':(<div><div>{`${r.d5.toFixed(3)}% ($${(r.d5Abs??0).toFixed(2)})`}</div><div className='opacity-70'>{r.p5==null?'':`Buy @$${Number(r.p5).toLocaleString(undefined,{maximumFractionDigits:2})} • PnL $${(r.pnl5??0).toFixed(2)} • Exit @$${Number(r.exit5).toLocaleString(undefined,{maximumFractionDigits:2})}`}</div></div>)}</td>
                     <td className='py-1 pr-3'>{r.source}</td>
                   </tr>
                 ))}
