@@ -1,0 +1,1 @@
+Place your kraken.js proxy here if you use Netlify Functions.
