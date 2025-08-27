@@ -170,16 +170,6 @@ export default function App(){
     return ()=>{ stop=true }
   }, [])
 
-  function fundingCloses(hours:number){
-    const end = Date.now()
-    const start = end - hours*3600*1000
-    const closes:number[] = []
-    const fourH = 4*3600*1000
-    const startAligned = Math.floor(start / fourH) * fourH
-    for(let t=startAligned; t<=end; t+=fourH) if(t>=start) closes.push(t)
-    return closes
-  }
-
   async function run(){
     setLoading(true)
     try{

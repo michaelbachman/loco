@@ -1,8 +1,10 @@
-
 [build]
   command = "cd apps/btc-futures && npm install --no-audit --no-fund && npm run build"
   publish = "apps/btc-futures/dist"
 
 [functions]
-  directory = "apps/btc-futures/netlify/functions"
   node_bundler = "esbuild"
+  directory = "apps/btc-futures/netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "18"
