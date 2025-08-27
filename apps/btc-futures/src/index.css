@@ -1,6 +1,15 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body { font-family: 'Noto Sans', system-ui, sans-serif; }
+body { @apply bg-neutral-950 text-neutral-100; }
+.wrap { @apply max-w-5xl mx-auto my-8 px-4; }
+.row { @apply flex items-center gap-3 flex-wrap; }
+.card { @apply bg-neutral-900 border border-neutral-800 rounded-xl p-4; }
+input, select, button { @apply bg-neutral-800 border border-neutral-700 text-neutral-200 rounded-md px-2 py-1; }
+table { @apply w-full; border-collapse: collapse; font-size: 0.875rem; }
+th, td { @apply text-left px-3 py-2 border-b border-neutral-800 align-top; }
+th { @apply text-neutral-400 font-semibold; }
+.sub { @apply opacity-80 text-xs; }
+.muted { @apply opacity-50; }
+.btn { @apply cursor-pointer; }
