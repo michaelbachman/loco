@@ -61,9 +61,9 @@ function aggregate(rows:DriftRow[], slots:string[]){
   })
 }
 
-function exportCsvRows(rows:DriftRow[], name:string){
+function exportCsvRows(rows:DriftRow[], name:string, cfg:{sizePct:number; leverage:number; targetUsd:number}){
   const header='funding_close_utc,slot,t_minus_1m_price,size_pct,leverage,target_usd,delta1m_pct,delta1m_usd,delta60_pct,delta60_usd,buyin60,pnl60,exit60_target,delta30_pct,delta30_usd,buyin30,pnl30,exit30_target,delta15_pct,delta15_usd,buyin15,pnl15,exit15_target,delta5_pct,delta5_usd,buyin5,pnl5,exit5_target,source'
-  const lines = rows.map(r=>[new Date(r.t).toISOString(), r.slot, r.p1m??'', sizePct, leverage, targetUsd, r.d1m??'', r.d1mAbs??'', r.d60??'', r.d60Abs??'', r.p60??'', r.pnl60??'', r.exit60??'', r.d30??'', r.d30Abs??'', r.p30??'', r.pnl30??'', r.exit30??'', r.d15??'', r.d15Abs??'', r.p15??'', r.pnl15??'', r.exit15??'', r.d5??'', r.d5Abs??'', r.p5??'', r.pnl5??'', r.exit5??'', r.source??''].join(','))
+  const lines = rows.map(r=>[new Date(r.t).toISOString(), r.slot, r.p1m??'', ${cfg.sizePct}, ${cfg.leverage}, ${cfg.targetUsd}, r.d1m??'', r.d1mAbs??'', r.d60??'', r.d60Abs??'', r.p60??'', r.pnl60??'', r.exit60??'', r.d30??'', r.d30Abs??'', r.p30??'', r.pnl30??'', r.exit30??'', r.d15??'', r.d15Abs??'', r.p15??'', r.pnl15??'', r.exit15??'', r.d5??'', r.d5Abs??'', r.p5??'', r.pnl5??'', r.exit5??'', r.source??''].join(','))
   const csv=[header, ...lines].join('\n')
   const blob = new Blob([csv], {type:'text/csv'}); const url=URL.createObjectURL(blob)
   const a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
@@ -216,7 +216,7 @@ export default function App(){
               <input type='number' min={10} step={10} value={targetUsd} onChange={e=>setTargetUsd(Number(e.target.value))} className='ml-2 w-28 bg-neutral-800 border border-neutral-700 rounded px-2 py-1' />
             </label>
             
-            <button onClick={()=> rows && exportCsvRows(rows,'kraken_drift_rows.csv')} className='px-3 py-1.5 rounded bg-neutral-100 text-neutral-900 disabled:opacity-50' disabled={!rows || rows.length===0}>Export Rows</button>
+            <button onClick={()=> rows && exportCsvRows(rows,'kraken_drift_rows.csv',{sizePct, leverage, targetUsd})} className='px-3 py-1.5 rounded bg-neutral-100 text-neutral-900 disabled:opacity-50' disabled={!rows || rows.length===0}>Export Rows</button>
             <button onClick={()=> agg && exportCsvAgg(agg,'kraken_drift_agg.csv')} className='px-3 py-1.5 rounded bg-neutral-100 text-neutral-900 disabled:opacity-50' disabled={!agg || agg.length===0}>Export Aggregates</button>
           </div>
         </div>
