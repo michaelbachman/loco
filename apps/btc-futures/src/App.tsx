@@ -142,14 +142,8 @@ export default function App(){
   useEffect(()=>{
     const ws = new WebSocket('wss://futures.kraken.com/ws/v1')
     ws.onopen = ()=> ws.send(JSON.stringify({ event:'subscribe', feed:'ticker', product_ids:[symbol] }))
-    ws.onmessage = (e)=> { try{ const m=JSON.parse(e.data as string); if(m.feed==='ticker' && m.product_id===symbol){ const p = Number(m.markPrice ?? m.last ?? m.price); if(!Number.isNaN(p)) setKrMark(p) } }catch{} }
-        </div>
-      </div>
-    );
-  }
-
-
-  return ()=>{ try{ws.close()}catch{} }
+    ws.onmessage = (e)=> { try{ const m = JSON.parse((e as MessageEvent).data as string); if(m.feed==='ticker' && m.product_id===symbol){ const p = Number(m.markPrice ?? m.last ?? m.price); if(!Number.isNaN(p)) setKrMark(p) } }catch{} }
+    return ()=>{ try{ws.close()}catch{} }
   },[symbol])
 
   // Autodetect funding interval from ticker nextFundingTime when available
