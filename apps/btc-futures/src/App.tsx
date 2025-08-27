@@ -6,40 +6,40 @@ import { Ohlc, pct, closesInRange, nearestBarBefore } from './lib/util'
 
 const client = new KrakenFuturesClient()
 const DEFAULT_SYMBOL = 'PI_XBTUSD'
+    
+// UI helper: renders drift metrics with buy-in, PnL, Exit, Notional, Margin and tooltip.
+type DriftCellProps = { pct:number|null; usd:number|null; buy:number|null; sizePct:number; leverage:number; targetUsd:number }
+const DriftCell: React.FC<DriftCellProps> = ({ pct, usd, buy, sizePct, leverage, targetUsd }) => {
+  if (pct==null) return <>—</>;
+  const qty = (sizePct/100) * leverage; // effective BTC size
+  const pnl = (usd==null) ? null : qty * usd;
+  const exit = (buy==null || qty===0) ? null : buy + (targetUsd/qty);
+  const notional = (buy==null) ? null : buy * qty;
+  const margin = (buy==null) ? null : buy * (sizePct/100);
+  const disabled = (buy==null) || (pnl==null) || (exit==null);
+  const tt = `qty=${qty.toFixed(4)} BTC; notional=$${notional?.toFixed(2) ?? '—'}; margin=$${margin?.toFixed(2) ?? '—'}; ` +
+             `pnl = qty * Δ$ = ${qty.toFixed(4)} * $${usd?.toFixed?.(2) ?? '—'}; exit = entry + target/qty`;
+  return (
+    <div>
+      <div>{`${pct.toFixed(3)}% ($${(usd ?? 0).toFixed(2)})`}</div>
+      <div className={disabled ? 'opacity-40' : 'opacity-70'} title={tt}>
+        {buy==null ? '' :
+          `Buy @$${Number(buy).toLocaleString(undefined,{maximumFractionDigits:2})} • ` +
+          (pnl==null ? '' : `PnL $${pnl.toFixed(2)} • `) +
+          (notional==null ? '' : `Notional $${notional.toFixed(2)} • `) +
+          (margin==null ? '' : `Margin $${margin.toFixed(2)} • `) +
+          (exit==null ? '' : `Exit @$${Number(exit).toLocaleString(undefined,{maximumFractionDigits:2})}`)
+        }
+      </div>
+    </div>
+  );
+}
 
 type DriftRow = { t:number; slot:string; d60:number|null; d30:number|null; d15:number|null; d5:number|null; d60Abs:number|null; d30Abs:number|null; d15Abs:number|null; d5Abs:number|null; p1m:number|null; d1m:number|null; d1mAbs:number|null; source?:string; p60:number|null; p30:number|null; p15:number|null; p5:number|null; pnl60:number|null; pnl30:number|null; pnl15:number|null; pnl5:number|null; exit60:number|null; exit30:number|null; exit15:number|null; exit5:number|null }
 
 function formatSlotLabel(h:number, interval:number){
   if(interval===8) return h%24===0?'00:00':h%24===8?'08:00':'16:00'
   if(interval===4) return ['00:00','04:00','08:00','12:00','16:00','20:00'][Math.floor((h%24)/4)]
-  
-  const DriftCell: React.FC<{ pct:number|null; usd:number|null; buy:number|null }> = ({ pct, usd, buy }) => {
-    if (pct==null) return <>—</>;
-    const qty = (sizePct/100) * leverage; // effective BTC size
-    const pnl = (usd==null) ? null : qty * usd;
-    const exit = (buy==null || qty===0) ? null : buy + (targetUsd/qty);
-    const notional = (buy==null) ? null : buy * qty;
-    const margin = (buy==null) ? null : buy * (sizePct/100);
-    const disabled = (buy==null) || (pnl==null) || (exit==null);
-    const tt = `qty=${qty.toFixed(4)} BTC; notional=$${notional?.toFixed(2) ?? '—'}; margin=$${margin?.toFixed(2) ?? '—'}; ` +
-               `pnl = qty * Δ$ = ${qty.toFixed(4)} * $${usd?.toFixed?.(2) ?? '—'}; exit = entry + target/qty`;
-    return (
-      <div>
-        <div>{`${pct.toFixed(3)}% ($${(usd ?? 0).toFixed(2)})`}</div>
-        <div className={disabled ? 'opacity-40' : 'opacity-70'} title={tt}>
-          {buy==null ? '' :
-            `Buy @$${Number(buy).toLocaleString(undefined,{maximumFractionDigits:2})} • ` +
-            (pnl==null ? '' : `PnL $${pnl.toFixed(2)} • `) +
-            (notional==null ? '' : `Notional $${notional.toFixed(2)} • `) +
-            (margin==null ? '' : `Margin $${margin.toFixed(2)} • `) +
-            (exit==null ? '' : `Exit @$${Number(exit).toLocaleString(undefined,{maximumFractionDigits:2})}`)
-          }
-        </div>
-      </div>
-    );
-  }
-
-
   return (h%24).toString().padStart(2,'0')+':00'
 }
 
@@ -143,28 +143,6 @@ export default function App(){
     const ws = new WebSocket('wss://futures.kraken.com/ws/v1')
     ws.onopen = ()=> ws.send(JSON.stringify({ event:'subscribe', feed:'ticker', product_ids:[symbol] }))
     ws.onmessage = (e)=> { try{ const m=JSON.parse(e.data as string); if(m.feed==='ticker' && m.product_id===symbol){ const p = Number(m.markPrice ?? m.last ?? m.price); if(!Number.isNaN(p)) setKrMark(p) } }catch{} }
-    
-  const DriftCell: React.FC<{ pct:number|null; usd:number|null; buy:number|null }> = ({ pct, usd, buy }) => {
-    if (pct==null) return <>—</>;
-    const qty = (sizePct/100) * leverage; // effective BTC size
-    const pnl = (usd==null) ? null : qty * usd;
-    const exit = (buy==null || qty===0) ? null : buy + (targetUsd/qty);
-    const notional = (buy==null) ? null : buy * qty;
-    const margin = (buy==null) ? null : buy * (sizePct/100);
-    const disabled = (buy==null) || (pnl==null) || (exit==null);
-    const tt = `qty=${qty.toFixed(4)} BTC; notional=$${notional?.toFixed(2) ?? '—'}; margin=$${margin?.toFixed(2) ?? '—'}; ` +
-               `pnl = qty * Δ$ = ${qty.toFixed(4)} * $${usd?.toFixed?.(2) ?? '—'}; exit = entry + target/qty`;
-    return (
-      <div>
-        <div>{`${pct.toFixed(3)}% ($${(usd ?? 0).toFixed(2)})`}</div>
-        <div className={disabled ? 'opacity-40' : 'opacity-70'} title={tt}>
-          {buy==null ? '' :
-            `Buy @$${Number(buy).toLocaleString(undefined,{maximumFractionDigits:2})} • ` +
-            (pnl==null ? '' : `PnL $${pnl.toFixed(2)} • `) +
-            (notional==null ? '' : `Notional $${notional.toFixed(2)} • `) +
-            (margin==null ? '' : `Margin $${margin.toFixed(2)} • `) +
-            (exit==null ? '' : `Exit @$${Number(exit).toLocaleString(undefined,{maximumFractionDigits:2})}`)
-          }
         </div>
       </div>
     );
