@@ -1,12 +1,24 @@
-
-// Kraken Futures proxy
-function getFetch(){ if(typeof fetch!=='undefined') return fetch; throw new Error('fetch unavailable in this runtime'); }
-exports.handler=async (event)=>{
-  try{
-    const qs=event.queryStringParameters||{}, path=String(qs.path||'/derivatives/api/v3/tickers'), raw=String(qs.qs||'')
-    if(!path.startsWith('/derivatives/api/')) return {statusCode:400, body:JSON.stringify({error:'Invalid path'})}
-    const url=`https://futures.kraken.com${path}${raw?(path.includes('?')?'&':'?')+raw:''}`
-    const r=await getFetch()(url,{headers:{Accept:'application/json'}}); const text=await r.text()
-    return {statusCode:r.status, headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Cache-Control':'public, max-age=3'}, body:text}
-  }catch(e){ return {statusCode:502, body:JSON.stringify({error:String(e?.message||e)})}}
+export async function handler(event) {
+  const { path, pair = 'XBTUSD', interval = '1', since } = event.queryStringParameters || {}
+  try {
+    if (path === 'spot_ohlc') {
+      const url = new URL('https://api.kraken.com/0/public/OHLC')
+      url.searchParams.set('pair', pair)
+      url.searchParams.set('interval', interval)
+      if (since) url.searchParams.set('since', since)
+      const r = await fetch(url, { headers: { 'user-agent': 'netlify-function' } })
+      const j = await r.json()
+      return { statusCode: 200, body: JSON.stringify(j) }
+    }
+    if (path === 'spot_ticker') {
+      const url = new URL('https://api.kraken.com/0/public/Ticker')
+      url.searchParams.set('pair', pair)
+      const r = await fetch(url, { headers: { 'user-agent': 'netlify-function' } })
+      const j = await r.json()
+      return { statusCode: 200, body: JSON.stringify(j) }
+    }
+    return { statusCode: 400, body: JSON.stringify({ error: 'unknown path', path }) }
+  } catch (e) {
+    return { statusCode: 500, body: JSON.stringify({ error: String(e) }) }
+  }
 }

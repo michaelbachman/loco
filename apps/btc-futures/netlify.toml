@@ -1,8 +1,7 @@
-
 [build]
-  command = "cd apps/btc-futures && npm install --no-audit --no-fund && npm run build"
-  publish = "apps/btc-futures/dist"
+  command = "npm install --no-audit --no-fund && npm run build"
+  publish = "dist"
 
 [functions]
-  directory = "apps/btc-futures/netlify/functions"
   node_bundler = "esbuild"
+  directory = "netlify/functions"
