@@ -7,7 +7,7 @@ import { Ohlc, pct, closesInRange, nearestBarBefore } from './lib/util'
 const client = new KrakenFuturesClient()
 const DEFAULT_SYMBOL = 'PI_XBTUSD'
 
-type DriftRow = { t:number; slot:string; d60:number|null; d30:number|null; d15:number|null; d5:number|null; d60Abs:number|null; d30Abs:number|null; d15Abs:number|null; d5Abs:number|null; p1m:number|null; d1m:number|null; d1mAbs:number|null; source?:string p60:number|null; p30:number|null; p15:number|null; p5:number|null; pnl60:number|null; pnl30:number|null; pnl15:number|null; pnl5:number|null; exit60:number|null; exit30:number|null; exit15:number|null; exit5:number|null }
+type DriftRow = { t:number; slot:string; d60:number|null; d30:number|null; d15:number|null; d5:number|null; d60Abs:number|null; d30Abs:number|null; d15Abs:number|null; d5Abs:number|null; p1m:number|null; d1m:number|null; d1mAbs:number|null; source?:string; p60:number|null; p30:number|null; p15:number|null; p5:number|null; pnl60:number|null; pnl30:number|null; pnl15:number|null; pnl5:number|null; exit60:number|null; exit30:number|null; exit15:number|null; exit5:number|null }
 
 function formatSlotLabel(h:number, interval:number){
   if(interval===8) return h%24===0?'00:00':h%24===8?'08:00':'16:00'
@@ -30,8 +30,7 @@ function computeRows(bars:Ohlc[], closes:number[], interval:number, source:strin
         if(beg){
           const pc=pct(end.close, beg.close)
           const usd=end.close - beg.close
-          const leverage=5
-          const qty = (sizePct/100) * leverage // effective BTC size
+                    const qty = (sizePct/100) * leverage // effective BTC size
           const pnl=qty * usd
           const exitTarget=beg.close + (targetUsd/qty) // price to net $100 on 0.01 BTC
           if(m===60){ r.d60=pc; r.d60Abs=usd; r.p60=beg.close; r.pnl60=pnl; r.exit60=exitTarget }
