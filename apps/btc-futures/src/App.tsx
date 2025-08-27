@@ -7,7 +7,7 @@ import { Ohlc, pct, closesInRange, nearestBarBefore } from './lib/util'
 const client = new KrakenFuturesClient()
 const DEFAULT_SYMBOL = 'PI_XBTUSD'
 
-type DriftRow = { t:number; slot:string; d60:number|null; d30:number|null; d15:number|null; d5:number|null; d60Abs:number|null; d30Abs:number|null; d15Abs:number|null; d5Abs:number|null; p1m:number|null; d1m:number|null; d1mAbs:number|null; source?:string }
+type DriftRow = { t:number; slot:string; d60:number|null; d30:number|null; d15:number|null; d5:number|null; d60Abs:number|null; d30Abs:number|null; d15Abs:number|null; d5Abs:number|null; p1m:number|null; d1m:number|null; d1mAbs:number|null; source?:string p60:number|null; p30:number|null; p15:number|null; p5:number|null; pnl60:number|null; pnl30:number|null; pnl15:number|null; pnl5:number|null; exit60:number|null; exit30:number|null; exit15:number|null; exit5:number|null }
 
 function formatSlotLabel(h:number, interval:number){
   if(interval===8) return h%24===0?'00:00':h%24===8?'08:00':'16:00'
@@ -15,13 +15,13 @@ function formatSlotLabel(h:number, interval:number){
   return (h%24).toString().padStart(2,'0')+':00'
 }
 
-function computeRows(bars:Ohlc[], closes:number[], interval:number, source?:string): DriftRow[] {
+function computeRows(bars:Ohlc[], closes:number[], interval:number, source:string|undefined, sizePct:number, leverage:number, targetUsd:number): DriftRow[] {
   const wins=[60,30,15,5]
   return closes.map(t=>{
     const end = nearestBarBefore(bars, t)
     const oneMin = nearestBarBefore(bars, t - 1*60*1000)
     const slot = formatSlotLabel(new Date(t).getUTCHours(), interval)
-    const r: DriftRow = { t, slot, d60:null, d30:null, d15:null, d5:null, d60Abs:null, d30Abs:null, d15Abs:null, d5Abs:null, p1m:null, d1m:null, d1mAbs:null, source }
+    const r: DriftRow = { t, slot, d60:null, d30:null, d15:null, d5:null, d60Abs:null, d30Abs:null, d15Abs:null, d5Abs:null, p1m:null, d1m:null, d1mAbs:null, p60:null, p30:null, p15:null, p5:null, pnl60:null, pnl30:null, pnl15:null, pnl5:null, exit60:null, exit30:null, exit15:null, exit5:null, source }
     if(oneMin){ r.p1m = oneMin.close }
     if(end && oneMin){ r.d1m = pct(end.close, oneMin.close); r.d1mAbs = end.close - oneMin.close }
     if(end){
@@ -30,10 +30,14 @@ function computeRows(bars:Ohlc[], closes:number[], interval:number, source?:stri
         if(beg){
           const pc=pct(end.close, beg.close)
           const usd=end.close - beg.close
-          if(m===60){ r.d60=pc; r.d60Abs=usd }
-          if(m===30){ r.d30=pc; r.d30Abs=usd }
-          if(m===15){ r.d15=pc; r.d15Abs=usd }
-          if(m===5){ r.d5=pc; r.d5Abs=usd }
+          const leverage=5
+          const qty = (sizePct/100) * leverage // effective BTC size
+          const pnl=qty * usd
+          const exitTarget=beg.close + (targetUsd/qty) // price to net $100 on 0.01 BTC
+          if(m===60){ r.d60=pc; r.d60Abs=usd; r.p60=beg.close; r.pnl60=pnl; r.exit60=exitTarget }
+          if(m===30){ r.d30=pc; r.d30Abs=usd; r.p30=beg.close; r.pnl30=pnl; r.exit30=exitTarget }
+          if(m===15){ r.d15=pc; r.d15Abs=usd; r.p15=beg.close; r.pnl15=pnl; r.exit15=exitTarget }
+          if(m===5){ r.d5=pc; r.d5Abs=usd; r.p5=beg.close; r.pnl5=pnl; r.exit5=exitTarget }
         }
       }
     }
@@ -59,8 +63,8 @@ function aggregate(rows:DriftRow[], slots:string[]){
 }
 
 function exportCsvRows(rows:DriftRow[], name:string){
-  const header='funding_close_utc,slot,t_minus_1m_price,delta1m_pct,delta1m_usd,delta60_pct,delta60_usd,delta30_pct,delta30_usd,delta15_pct,delta15_usd,delta5_pct,delta5_usd,source'
-  const lines = rows.map(r=>[new Date(r.t).toISOString(), r.slot, r.p1m??'', r.d1m??'', r.d1mAbs??'', r.d60??'', r.d60Abs??'', r.d30??'', r.d30Abs??'', r.d15??'', r.d15Abs??'', r.d5??'', r.d5Abs??'', r.source??''].join(','))
+  const header='funding_close_utc,slot,t_minus_1m_price,size_pct,leverage,target_usd,delta1m_pct,delta1m_usd,delta60_pct,delta60_usd,buyin60,pnl60,exit60_target,delta30_pct,delta30_usd,buyin30,pnl30,exit30_target,delta15_pct,delta15_usd,buyin15,pnl15,exit15_target,delta5_pct,delta5_usd,buyin5,pnl5,exit5_target,source'
+  const lines = rows.map(r=>[new Date(r.t).toISOString(), r.slot, r.p1m??'', sizePct, leverage, targetUsd, r.d1m??'', r.d1mAbs??'', r.d60??'', r.d60Abs??'', r.p60??'', r.pnl60??'', r.exit60??'', r.d30??'', r.d30Abs??'', r.p30??'', r.pnl30??'', r.exit30??'', r.d15??'', r.d15Abs??'', r.p15??'', r.pnl15??'', r.exit15??'', r.d5??'', r.d5Abs??'', r.p5??'', r.pnl5??'', r.exit5??'', r.source??''].join(','))
   const csv=[header, ...lines].join('\n')
   const blob = new Blob([csv], {type:'text/csv'}); const url=URL.createObjectURL(blob)
   const a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
@@ -93,6 +97,11 @@ export default function App(){
   const [symbol, setSymbol] = useLocalStorage<string>('kr_symbol', DEFAULT_SYMBOL)
   const [intervalMode, setIntervalMode] = useLocalStorage<'auto'|'manual'>('interval_mode','auto')
   const [manualInterval, setManualInterval] = useLocalStorage<number>('manual_interval', 4)
+
+  // Trade config
+  const [sizePct, setSizePct] = useLocalStorage<number>('trade_size_pct', 1)
+  const [leverage, setLeverage] = useLocalStorage<number>('trade_leverage', 5)
+  const [targetUsd, setTargetUsd] = useLocalStorage<number>('trade_target_usd', 100)
 
   const [krInterval, setKrInterval] = useState<number>(4) // auto-detected later
   const [krMark, setKrMark] = useState<number|undefined>(undefined)
@@ -134,7 +143,7 @@ export default function App(){
       setStatus('fetching')
       const res = await client.getOhlc(symbol, '1m', { since: start - 70*60*1000, until: end })
       const closes = closesInRange(start, end, krInterval)
-      const rows0 = computeRows(res.bars, closes, krInterval, res.source)
+      const rows0 = computeRows(res.bars, closes, krInterval, res.source, sizePct, leverage, targetUsd)
       setRows(rows0)
       const slots = krInterval===8? ['00:00','08:00','16:00']: ['00:00','04:00','08:00','12:00','16:00','20:00']
       setAgg(aggregate(rows0, slots))
@@ -198,6 +207,16 @@ export default function App(){
           <div className='opacity-80'>Mark: {krMark? krMark.toLocaleString(): '—'}</div>
           <div className='opacity-80'>Interval: {intervalMode==='auto'? (krInterval+'h (auto)') : (manualInterval+'h')}</div>
           <div className='ml-auto flex gap-2'>
+            <label className='mr-2'>Size (% of 1 BTC)
+              <input type='number' min={0.1} step={0.1} max={100} value={sizePct} onChange={e=>setSizePct(Number(e.target.value))} className='ml-2 w-24 bg-neutral-800 border border-neutral-700 rounded px-2 py-1' />
+            </label>
+            <label className='mr-2'>Leverage (x)
+              <input type='number' min={1} step={1} max={125} value={leverage} onChange={e=>setLeverage(Number(e.target.value))} className='ml-2 w-20 bg-neutral-800 border border-neutral-700 rounded px-2 py-1' />
+            </label>
+            <label className='mr-2'>Target $ Profit
+              <input type='number' min={10} step={10} value={targetUsd} onChange={e=>setTargetUsd(Number(e.target.value))} className='ml-2 w-28 bg-neutral-800 border border-neutral-700 rounded px-2 py-1' />
+            </label>
+            
             <button onClick={()=> rows && exportCsvRows(rows,'kraken_drift_rows.csv')} className='px-3 py-1.5 rounded bg-neutral-100 text-neutral-900 disabled:opacity-50' disabled={!rows || rows.length===0}>Export Rows</button>
             <button onClick={()=> agg && exportCsvAgg(agg,'kraken_drift_agg.csv')} className='px-3 py-1.5 rounded bg-neutral-100 text-neutral-900 disabled:opacity-50' disabled={!agg || agg.length===0}>Export Aggregates</button>
           </div>
